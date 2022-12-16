@@ -1,6 +1,9 @@
 "use strict";
 
-const { subtle, getRandomValues } = require("crypto").webcrypto;
+//const { subtle, getRandomValues } = require("crypto").webcrypto;
+// changes suggested on piazza: (https://piazza.com/class/l7s0y9hfkqrkn/post/144)
+const crypto = require('crypto');
+const { subtle } = require("crypto").webcrypto;
 
 ////////////////////////////////////////////////////////////////////////////////
 //  Cryptographic Primitives
@@ -8,7 +11,7 @@ const { subtle, getRandomValues } = require("crypto").webcrypto;
 // All of the cryptographic functions you need for this assignment
 // are contained within this library.
 //
-// For your convinience, we have abstracted away all of the pesky
+// For your convenience, we have abstracted away all of the pesky
 // underlying data types (bitarrays, etc) so that you can focus
 // on building messenger.js without getting caught up with conversions.
 // Keys, hash outputs, ciphertexts, and signatures are always hex-encoded
@@ -26,16 +29,17 @@ export function byteArrayToString(arr) {
   return decoder.decode(arr);
 }
 
+// also changed this function according to Virginia's piazza post
 export function genRandomSalt(len = 16) {
-  // Used to generate IVs for AES encryption
-  // Used in combination with encryptWithGCM and decryptWithGCM
-  return byteArrayToString(getRandomValues(new Uint8Array(len)));
+    // Used to generate IVs for AES encryption
+    // Used in combination with encryptWithGCM and decryptWithGCM
+    return byteArrayToString(crypto.webcrypto.getRandomValues(new Uint8Array(len)));
 }
 
 export async function cryptoKeyToJSON(cryptoKey) {
   // Used to export and return CryptoKey in JSON format
   // Can console.log() the returned variable to see printed key in a readable format
-  // This function can be helpfl for debugging since console.log() on cryptoKey
+  // This function can be helpful for debugging since console.log() on cryptoKey
   // directly will not show the key data
   let key = await subtle.exportKey('jwk', cryptoKey);
   return key
