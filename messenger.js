@@ -22,6 +22,16 @@ import {
 
 import { govEncryptionDataStr } from "./lib";
 
+const stringifyCert = function (cert) {
+    if (typeof cert == "object") {
+        return JSON.stringify(cert);
+    } else if (typeof cert == "string") {
+        return cert;
+    } else {
+        throw "Certificate is not a JSON or string";
+    }
+};
+
 /********* Implementation ********/
 
 export default class MessengerClient {
@@ -39,7 +49,7 @@ export default class MessengerClient {
     this.EGKeyPair = {} // keypair from generateCertificate
   }
 
-/**
+   /**
    * Generate a certificate to be stored with the certificate authority.
    * The certificate must contain the field "username".
    *
@@ -48,53 +58,61 @@ export default class MessengerClient {
    *
    * Return Type: certificate object/dictionary
    */
- async generateCertificate(username) {
-  throw("not implemented!");
-  const certificate = {};
-  return certificate;
-}
+    async generateCertificate(username) {
+        const certificate = {};
+        const result = await generateEG();
+        certificate.username = username;
+        certificate.pub = result.pub;
 
-/**
- * Receive and store another user's certificate.
- *
- * Arguments:
- *   certificate: certificate object/dictionary
- *   signature: string
- *
- * Return Type: void
- */
-async receiveCertificate(certificate, signature) {
-  throw("not implemented!");
-}
+        return certificate;
+    }
 
-/**
- * Generate the message to be sent to another user.
- *
- * Arguments:
- *   name: string
- *   plaintext: string
- *
- * Return Type: Tuple of [dictionary, string]
- */
-async sendMessage(name, plaintext) {
-  throw("not implemented!");
-  const header = {};
-  const ciphertext = "";
-  return [header, ciphertext];
-}
+    /**
+    * Receive and store another user's certificate.
+    *
+    * Arguments:
+    *   certificate: certificate object/dictionary
+    *   signature: string
+    *
+    * Return Type: void
+    */
+    async receiveCertificate(certificate, signature) {
+        const result = await verifyWithECDSA(this.caPublicKey, JSON.stringify(certificate), signature);
+        if (result) {
+            this.certs[certificate.username] = certificate;
+        } else {
+            throw ("verifyWithECDSA(): Invalid certificate!");
+        }
+    }
+
+    /**
+    * Generate the message to be sent to another user.
+    *
+    * Arguments:
+    *   name: string
+    *   plaintext: string
+    *
+    * Return Type: Tuple of [dictionary, string]
+    */
+    async sendMessage(name, plaintext) {
+      throw("not implemented!");
+      const header = {};
+      const ciphertext = "";
+      return [header, ciphertext];
+    }
 
 
-/**
- * Decrypt a message received from another user.
- *
- * Arguments:
- *   name: string
- *   [header, ciphertext]: Tuple of [dictionary, string]
- *
- * Return Type: string
- */
-async receiveMessage(name, [header, ciphertext]) {
-  throw("not implemented!");
-  return plaintext;
-}
+    /**
+    * Decrypt a message received from another user.
+    *
+    * Arguments:
+    *   name: string
+    *   [header, ciphertext]: Tuple of [dictionary, string]
+    *
+    * Return Type: string
+    */
+    async receiveMessage(name, [header, ciphertext]) {
+      throw("not implemented!");
+      return plaintext;
+    }
 };
