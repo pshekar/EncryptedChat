@@ -37,6 +37,13 @@ export default class MessengerClient {
     this.conns = {}; // data for each active connection
     this.certs = {}; // certificates of other users
     this.EGKeyPair = {} // keypair from generateCertificate
+    /*
+     * Need to add data members for the sending and receiving chains
+     *  - When a message is sent or received, a symmetric-key ratchet step is applied to the sending or receiving chain to derive the message key.
+     *  - When a new ratchet public key is received, a DH ratchet step is performed prior to the symmetric-key ratchet to replace the chain keys.
+    */
+    this.sending_chain = {}; // need separate chains for each line of communication->index by username?
+    this.receiving_chain = {};
     this.Ns = 0; // number of messages sent
     this.Nr = 0; // number of messages received
   }
@@ -108,7 +115,16 @@ async sendMessage(name, plaintext) {
         if (!DHKey) {
             throw ("computeDH: Invalid key!");
         }
+
+        // generate a new ratchet key pair (assuming DH key?)
+        // feed DH output to root KDF along with current root key (is this the shared secret key?)
+        // HKDF outputs new root key (store as secret key?) and sending chain key (store in sending chain?)
     }
+
+    // apply "symmetric-key ratchet step" to current sending chain key
+        // result is new message key
+        // new chain key stored, message key and old chain key deleted-> which do we store?
+
     // convert the HMAC output of the DH key to an AES key for encryption
     const AESKey = await HMACtoAESKey(DHKey, govEncryptionDataStr);
     if (!AESKey) {
@@ -140,17 +156,17 @@ async sendMessage(name, plaintext) {
         
     // add cGov to the header once computed
     header["cGov"] = govCipher;
-    this.Ns++;
 
+    // now that the government stuff is done in the header, encrypt the message 
     const ciphertext = await encryptWithGCM(AESKey, plaintext, iv, JSON.stringify(header));
     if (!ciphertext) {
         throw ("encryptWithGCM(): Invalid ciphertext!");
     }
 
-    return [header, ciphertext];
-    }
+    this.Ns++;
 
-    // might need to wait to encrypt the message until the header is done
+    return [header, ciphertext];
+}
 
 
 /**
@@ -173,6 +189,9 @@ async receiveMessage(name, [header, ciphertext]) {
             throw ("computeDH: Invalid key!");
         }
     }
+
+    // have to derive new sending and receiving chain keys when we receive a new message????
+
     // convert the HMAC output of the DH key to an AES key for encryption
     const AESKey = await HMACtoAESKey(DHKey, govEncryptionDataStr);
     if (!AESKey) {
