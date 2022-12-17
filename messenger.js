@@ -45,8 +45,9 @@ export default class MessengerClient {
     this.sending_chain = {}; // need separate chains for each line of communication->index by username?
     this.receiving_chain = {};
     this.root_chain = {};
-    this.Ns = 0; // number of messages sent
-    this.Nr = 0; // number of messages received
+    this.Ns = {}; // number of messages sent
+    this.Nr = {}; // number of messages received
+    this.receive_num = {};
   }
 
 /**
@@ -61,6 +62,7 @@ export default class MessengerClient {
 async generateCertificate(username) {
     const certificate = {};
     const key_pair = await generateEG();
+    //error checking
     certificate.username = username;
     certificate.pub = key_pair.pub;
     this.EGKeyPair = key_pair; // any reason to store multiple of these?
@@ -102,10 +104,15 @@ async sendMessage(name, plaintext) {
     // separate IV for government cipher
     const govIV = genRandomSalt();
     let DHKey = {};
+
+    if (!this.Ns.hasOwnProperty(name)) {
+        this.Ns[name] = 0;
+    }
     const header = {
         "vGov": this.EGKeyPair.pub,
         "ivGov": govIV,
         "receiver_iv": iv,
+        "msg_num": this.Ns[name],
     };
 
     if (!this.conns.hasOwnProperty(name)) { // if there hasn't been previous communication
@@ -117,6 +124,9 @@ async sendMessage(name, plaintext) {
         if (!DHKey) {
             throw ("computeDH: Invalid key!");
         }
+
+        // run X3DH to create shared key
+                // starts chain(s?)
 
         // const tmp_key = await HMACtoHMACKey(this.EGKeyPair.sec, govEncryptionDataStr);
 
@@ -185,7 +195,7 @@ async sendMessage(name, plaintext) {
         throw ("encryptWithGCM(): Invalid ciphertext!");
     }
 
-    this.Ns++;
+    this.Ns[name]++;
 
     return [header, ciphertext];
 }
@@ -208,6 +218,26 @@ async receiveMessage(name, [header, ciphertext]) {
         // assuming we need to store the root key (SK) and DH shared key in this.conns, but how to generate/ share between Alice and Bob?
         //
         // this.conns[name] = true;
+
+        //if (!this.Nr.hasOwnProperty(name)) {
+        //    this.Nr[name] = 0;
+        //}
+
+        if (!this.receive_num.hasOwnProperty(name)) {
+            this.receive_num[name] = {};
+        }
+
+        const temp = header.msg_num
+
+        // could optimize by bounding the message numbers that need to be tracked, where any message lower than the threshold gets auto-rejected...
+        // implementing this would likely obfuscate the code however, and won't matter 
+        if (!this.receive_num[name].hasOwnProperty(temp)) {
+            this.receive_num[name][temp] = true;
+        }
+        else {
+            throw ("Message replay attack foiled");
+        }
+
         DHKey = await computeDH(this.EGKeyPair.sec, this.certs[name].pub);
         if (!DHKey) {
             throw ("computeDH: Invalid key!");
@@ -246,7 +276,7 @@ async receiveMessage(name, [header, ciphertext]) {
     // decrypt the ciphertext
     const plaintext = await decryptWithGCM(AESKey, ciphertext, header.receiver_iv, JSON.stringify(header));
     if (plaintext) {
-        this.Nr++;
+        this.Nr[name]++;
         return byteArrayToString(plaintext);
     } else {
         throw("decryptWithGCM: Invalid plaintext!");
