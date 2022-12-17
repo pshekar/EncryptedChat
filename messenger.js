@@ -101,59 +101,59 @@ async sendMessage(name, plaintext) {
     const iv = genRandomSalt();
     // separate IV for government cipher
     const govIV = genRandomSalt();
-    let DHKey = "";
+    let DHKey = {};
     const header = {
         "vGov": this.EGKeyPair.pub,
         "ivGov": govIV,
         "receiver_iv": iv,
     };
-    let tmp_key = {};
 
     if (!this.conns.hasOwnProperty(name)) { // if there hasn't been previous communication
         // setup the session by generating the necessary double ratchet keys according to the Signal spec
         // use X3DH to agree on shared secret key?
         // assuming we need to store the root key (SK) and DH shared key in this.conns, but how to generate/ share between Alice and Bob?
-        this.conns[name] = true;
+        // this.conns[name] = true;
         DHKey = await computeDH(this.EGKeyPair.sec, this.certs[name].pub);
         if (!DHKey) {
             throw ("computeDH: Invalid key!");
         }
 
-        tmp_key = await HMACtoHMACKey(this.EGKeyPair.sec, govEncryptionDataStr);
+        // const tmp_key = await HMACtoHMACKey(this.EGKeyPair.sec, govEncryptionDataStr);
 
-        if (!tmp_key) {
-            throw ("HMACtoHMACKey: Invalid key!");
-        }
+        // if (!tmp_key) {
+        //     throw ("HMACtoHMACKey: Invalid key!");
+        // }
 
-        [this.root_chain[name], this.sending_chain[name]] = await HKDF(tmp_key, DHKey);
+        // console.log(this.EGKeyPair);
+        // const x = await HKDF(DHKey, this.govPublicKey, "first-time");
 
-        if (!this.root_chain[name] || !this.sending_chain[name]) {
-            throw ("HKDF: Invalid key!");
-        }
+        // if (!this.root_chain[name] || !this.sending_chain[name]) {
+        //     throw ("HKDF: Invalid key!");
+        // }
         // generate a new ratchet key pair (assuming DH key?)
         // feed DH output to root KDF along with current root key (is this the shared secret key?)
         // HKDF outputs new root key (store as secret key?) and sending chain key (store in sending chain?)
     }
 
-    let msg_key;
-    [this.sending_chain[name], msg_key] = await HKDF(this.root_chain[name], this.sending_chain[name]);
-    //const [a, b] = await HKDF(DHKey, tmp_key);
+    // let msg_key;
+    // [this.sending_chain[name], msg_key] = await HKDF(this.root_chain[name], this.sending_chain[name]);
+    // //const [a, b] = await HKDF(DHKey, tmp_key);
 
-    if (!this.sending_chain[name] || !msg_key) {
-        throw ("HKDF: Invalid key!");
-    }
+    // if (!this.sending_chain[name] || !msg_key) {
+    //     throw ("HKDF: Invalid key!");
+    // }
 
     // apply "symmetric-key ratchet step" to current sending chain key
         // result is new message key
         // new chain key stored, message key and old chain key deleted-> which do we store?
 
     // convert the HMAC output of the DH key to an AES key for encryption
-    const AESKey = await HMACtoAESKey(msg_key, govEncryptionDataStr);
+    const AESKey = await HMACtoAESKey(DHKey, govEncryptionDataStr);
     if (!AESKey) {
         throw ("HMACtoAESKey: Invalid key!");
     }
     // this can probably be optimized, needs to be called for the gov encryption
-    const AESKeyArrayBuffer = await HMACtoAESKey(msg_key, govEncryptionDataStr, true);
+    const AESKeyArrayBuffer = await HMACtoAESKey(DHKey, govEncryptionDataStr, true);
     if (!AESKeyArrayBuffer) {
         throw ("HMACtoAESKey: Invalid key!");
     }
@@ -207,38 +207,38 @@ async receiveMessage(name, [header, ciphertext]) {
         // use X3DH to agree on shared secret key?
         // assuming we need to store the root key (SK) and DH shared key in this.conns, but how to generate/ share between Alice and Bob?
         //
-        this.conns[name] = true;
+        // this.conns[name] = true;
         DHKey = await computeDH(this.EGKeyPair.sec, this.certs[name].pub);
         if (!DHKey) {
             throw ("computeDH: Invalid key!");
         }
 
-        tmp_key = await HMACtoHMACKey(this.EGKeyPair.sec, govEncryptionDataStr);
+        // tmp_key = await HMACtoHMACKey(this.EGKeyPair.sec, govEncryptionDataStr);
 
-        if (!tmp_key) {
-            throw ("HMACtoHMACKey: Invalid key!");
-        }
+        // if (!tmp_key) {
+        //     throw ("HMACtoHMACKey: Invalid key!");
+        // }
 
-        [this.root_chain[name], this.receiving_chain[name]] = await HKDF(tmp_key, DHKey);
+        // [this.root_chain[name], this.receiving_chain[name]] = await HKDF(tmp_key, DHKey);
 
-        if (!this.root_chain[name] || !this.receiving_chain[name]) {
-            throw ("HKDF: Invalid key!");
-        }
-        //
+        // if (!this.root_chain[name] || !this.receiving_chain[name]) {
+        //     throw ("HKDF: Invalid key!");
+        // }
+        
     }
 
     // have to derive new sending and receiving chain keys when we receive a new message????
 
-    let msg_key;
-    [this.receiving_chain[name], msg_key] = await HKDF(this.root_chain[name], this.receiving_chain[name]);
-    //const [a, b] = await HKDF(DHKey, tmp_key);
+    // let msg_key;
+    // [this.receiving_chain[name], msg_key] = await HKDF(this.root_chain[name], this.receiving_chain[name]);
+    // //const [a, b] = await HKDF(DHKey, tmp_key);
 
-    if (!this.receiving_chain[name] || !msg_key) {
-        throw ("HKDF: Invalid key!");
-    }
+    // if (!this.receiving_chain[name] || !msg_key) {
+    //     throw ("HKDF: Invalid key!");
+    // }
 
     // convert the HMAC output of the DH key to an AES key for encryption
-    const AESKey = await HMACtoAESKey(msg_key, govEncryptionDataStr);
+    const AESKey = await HMACtoAESKey(DHKey, govEncryptionDataStr);
     if (!AESKey) {
         throw ("HMACtoAESKey: Invalid key!");
     }
