@@ -37,6 +37,8 @@ export default class MessengerClient {
     this.conns = {}; // data for each active connection
     this.certs = {}; // certificates of other users
     this.EGKeyPair = {} // keypair from generateCertificate
+    this.Ns = 0; // number of messages sent
+    this.Nr = 0; // number of messages received
   }
 
 /**
@@ -71,6 +73,7 @@ async receiveCertificate(certificate, signature) {
     const result = await verifyWithECDSA(this.caPublicKey, JSON.stringify(certificate), signature);
     if (result) {
         this.certs[certificate.username] = certificate;
+        // probably add to conns here?
     } else {
         throw ("verifyWithECDSA(): Invalid certificate!");
     }
@@ -85,24 +88,64 @@ async receiveCertificate(certificate, signature) {
 *
 * Return Type: Tuple of [dictionary, string]
 */
+// we can assume we already have receiver's certificate, and they have our's
 async sendMessage(name, plaintext) {
-    const header = {};
-    const ciphertext = "";
-    // can assume we already have receiver's certificate, and they have our's
+    const iv = genRandomSalt();
+    // separate IV for government cipher
+    const govIV = genRandomSalt();
+    let DHKey = "";
+    const header = {
+        "vGov": this.EGKeyPair.pub,
+        "ivGov": govIV,
+        "receiver_iv": iv,
+    };
 
-    
     if (!this.conns.hasOwnProperty(name)) { // if there hasn't been previous communication
         // setup the session by generating the necessary double ratchet keys according to the Signal spec
-            // use X3DH to agree on shared secret key?
-            // assuming we need to store the root key (SK) and DH shared key in this.conns, but how to generate/ share between Alice and Bob?
+        // use X3DH to agree on shared secret key?
+        // assuming we need to store the root key (SK) and DH shared key in this.conns, but how to generate/ share between Alice and Bob?
+        DHKey = await computeDH(this.EGKeyPair.sec, this.certs[name].pub);
+        if (!DHKey) {
+            throw ("computeDH: Invalid key!");
+        }
     }
-    
+    // convert the HMAC output of the DH key to an AES key for encryption
+    const AESKey = await HMACtoAESKey(DHKey, govEncryptionDataStr);
+    if (!AESKey) {
+        throw ("HMACtoAESKey: Invalid key!");
+    }
+    // this can probably be optimized, needs to be called for the gov encryption
+    const AESKeyArrayBuffer = await HMACtoAESKey(DHKey, govEncryptionDataStr, true);
+    if (!AESKeyArrayBuffer) {
+        throw ("HMACtoAESKey: Invalid key!");
+    }
 
-    // now that the session has been established, or if it already was
-    // do the message sending things
+    // now that the session has been established (or if it already was),
+    // encrypt and send the message
+    const ciphertext = await encryptWithGCM(AESKey, plaintext, iv);
+    if (ciphertext) {
+        // govDecrypt calls decrypt twice for some reason so im encrypting here again?
+        // this is cuz we need to encrypt the original AESKey again for the gov cipher
+        const DHKeyGov = await computeDH(this.EGKeyPair.sec, this.govPublicKey);
+        if (!DHKey) {
+            throw ("computeDH: Invalid key!");
+        }
+        const AESKeyGov = await HMACtoAESKey(DHKeyGov, govEncryptionDataStr);
+        if (!AESKeyGov) {
+            throw ("HMACtoAESKey: Invalid key!");
+        }
+        const govCipher = await encryptWithGCM(AESKeyGov, AESKeyArrayBuffer, govIV);
+        if (!govCipher) {
+            throw("encryptWithGCM(): Invalid ciphertext!");
+        }
         
-
-    return [header, ciphertext];
+        // add cGov to the header once computed
+        header["cGov"]= govCipher;
+        this.Ns++;
+        return [header, ciphertext];
+    } else {
+        throw("encryptWithGCM(): Invalid ciphertext!");
+    }
 }
 
 
@@ -116,7 +159,29 @@ async sendMessage(name, plaintext) {
 * Return Type: string
 */
 async receiveMessage(name, [header, ciphertext]) {
-    throw("not implemented!");
-    return plaintext;
+    let DHKey = "";
+    if (!this.conns.hasOwnProperty(name)) { // if there hasn't been previous communication
+        // setup the session by generating the necessary double ratchet keys according to the Signal spec
+        // use X3DH to agree on shared secret key?
+        // assuming we need to store the root key (SK) and DH shared key in this.conns, but how to generate/ share between Alice and Bob?
+        DHKey = await computeDH(this.EGKeyPair.sec, this.certs[name].pub);
+        if (!DHKey) {
+            throw ("computeDH: Invalid key!");
+        }
+    }
+    // convert the HMAC output of the DH key to an AES key for encryption
+    const AESKey = await HMACtoAESKey(DHKey, govEncryptionDataStr);
+    if (!AESKey) {
+        throw ("HMACtoAESKey: Invalid key!");
+    }
+
+    // decrypt the ciphertext
+    const plaintext = await decryptWithGCM(AESKey, ciphertext, header.receiver_iv);
+    if (plaintext) {
+        this.Nr++;
+        return byteArrayToString(plaintext);
+    } else {
+        throw("decryptWithGCM: Invalid plaintext!");
+    }
 }
 };
