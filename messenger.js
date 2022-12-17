@@ -122,31 +122,35 @@ async sendMessage(name, plaintext) {
 
     // now that the session has been established (or if it already was),
     // encrypt and send the message
-    const ciphertext = await encryptWithGCM(AESKey, plaintext, iv);
-    if (ciphertext) {
-        // govDecrypt calls decrypt twice for some reason so im encrypting here again?
-        // this is cuz we need to encrypt the original AESKey again for the gov cipher
-        const DHKeyGov = await computeDH(this.EGKeyPair.sec, this.govPublicKey);
-        if (!DHKey) {
-            throw ("computeDH: Invalid key!");
-        }
-        const AESKeyGov = await HMACtoAESKey(DHKeyGov, govEncryptionDataStr);
-        if (!AESKeyGov) {
-            throw ("HMACtoAESKey: Invalid key!");
-        }
-        const govCipher = await encryptWithGCM(AESKeyGov, AESKeyArrayBuffer, govIV);
-        if (!govCipher) {
-            throw("encryptWithGCM(): Invalid ciphertext!");
-        }
-        
-        // add cGov to the header once computed
-        header["cGov"]= govCipher;
-        this.Ns++;
-        return [header, ciphertext];
-    } else {
+
+    // govDecrypt calls decrypt twice for some reason so im encrypting here again?
+    // this is cuz we need to encrypt the original AESKey again for the gov cipher
+    const DHKeyGov = await computeDH(this.EGKeyPair.sec, this.govPublicKey);
+    if (!DHKey) {
+        throw ("computeDH: Invalid key!");
+    }
+    const AESKeyGov = await HMACtoAESKey(DHKeyGov, govEncryptionDataStr);
+    if (!AESKeyGov) {
+        throw ("HMACtoAESKey: Invalid key!");
+    }
+    const govCipher = await encryptWithGCM(AESKeyGov, AESKeyArrayBuffer, govIV);
+    if (!govCipher) {
         throw("encryptWithGCM(): Invalid ciphertext!");
     }
-}
+        
+    // add cGov to the header once computed
+    header["cGov"] = govCipher;
+    this.Ns++;
+
+    const ciphertext = await encryptWithGCM(AESKey, plaintext, iv, JSON.stringify(header));
+    if (!ciphertext) {
+        throw ("encryptWithGCM(): Invalid ciphertext!");
+    }
+
+    return [header, ciphertext];
+    }
+
+    // might need to wait to encrypt the message until the header is done
 
 
 /**
@@ -176,7 +180,7 @@ async receiveMessage(name, [header, ciphertext]) {
     }
 
     // decrypt the ciphertext
-    const plaintext = await decryptWithGCM(AESKey, ciphertext, header.receiver_iv);
+    const plaintext = await decryptWithGCM(AESKey, ciphertext, header.receiver_iv, JSON.stringify(header));
     if (plaintext) {
         this.Nr++;
         return byteArrayToString(plaintext);
