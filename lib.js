@@ -107,7 +107,7 @@ export async function HMACtoHMACKey(key, data) {
   return await subtle.importKey("raw", HMAC_buff, { name: "HMAC", hash: "SHA-256", length: 256 }, true, ["sign"]);
 }
 
-export async function HKDF(inputKey, salt, infoStr) {
+export async function HKDF(inputKey, salt, infoStr = "ratchet-str") {
   // Calculates HKDF outputs
   // inputKey is a cryptoKey with derivedKeyAlgorithm HMAC
   // salt is a second cryptoKey with derivedKeyAlgorithm HMAC
